@@ -20,6 +20,9 @@ import (
 	"github.com/ankitsin007/supportly-agent/internal/source"
 	"github.com/ankitsin007/supportly-agent/internal/source/docker"
 	"github.com/ankitsin007/supportly-agent/internal/source/file"
+	"github.com/ankitsin007/supportly-agent/internal/source/journald"
+	"github.com/ankitsin007/supportly-agent/internal/source/kubernetes"
+	"github.com/ankitsin007/supportly-agent/internal/tlsconfig"
 )
 
 var (
@@ -27,7 +30,7 @@ var (
 	logLevel   = flag.String("log-level", "info", "Log level: debug, info, warn, error")
 )
 
-const version = "0.2.0"
+const version = "0.3.0"
 
 func main() {
 	flag.Parse()
@@ -60,7 +63,24 @@ func main() {
 		},
 	}
 
-	httpSink := sink.New(cfg.APIEndpoint, cfg.APIKey)
+	tlsCfg, err := tlsconfig.Build(tlsconfig.Options{
+		CABundlePath:   cfg.TLS.CABundlePath,
+		CertPin:        cfg.TLS.CertPin,
+		ClientCertFile: cfg.TLS.ClientCertFile,
+		ClientKeyFile:  cfg.TLS.ClientKeyFile,
+		SkipVerify:     cfg.TLS.SkipVerify,
+		Acknowledged:   cfg.TLS.Acknowledged,
+	})
+	if err != nil {
+		slog.Error("tls config invalid", "err", err)
+		os.Exit(1)
+	}
+	if cfg.TLS.SkipVerify {
+		slog.Warn("TLS verification DISABLED — agent is operating in INSECURE mode",
+			"reason", "--tls-skip-verify is set")
+	}
+
+	httpSink := sink.NewWithTLS(cfg.APIEndpoint, cfg.APIKey, tlsCfg)
 
 	// PII redactor — wraps the sink so envelopes are scrubbed at the boundary.
 	var redactor *redact.Redactor
@@ -88,6 +108,14 @@ func main() {
 			} else {
 				sources = append(sources, docker.New(sc.ExcludeContainers))
 			}
+		case "journald":
+			sources = append(sources, journald.New(sc.Units))
+		case "kubernetes":
+			ks := kubernetes.New(sc.ExcludeNamespaces)
+			if sc.PodLogRoot != "" {
+				ks.Root = sc.PodLogRoot
+			}
+			sources = append(sources, ks)
 		default:
 			slog.Warn("unknown source type — skipping", "type", sc.Type)
 		}
@@ -209,10 +237,16 @@ func main() {
 
 // streamKey derives a stable key per logical log stream so each stream gets
 // its own recombiner. For Docker we want one per container, for files one
-// per path; for unknown sources we just use the source name.
+// per path, for journald per systemd unit, for k8s per (pod, container).
 func streamKey(raw source.RawLog) string {
+	if pod := raw.Tags["k8s_pod"]; pod != "" {
+		return "k8s:" + pod + "/" + raw.Tags["container_name"]
+	}
 	if v := raw.Tags["container_name"]; v != "" {
 		return "docker:" + v
+	}
+	if v := raw.Tags["systemd_unit"]; v != "" {
+		return "journald:" + v
 	}
 	if v := raw.Tags["file_path"]; v != "" {
 		return "file:" + v

@@ -23,10 +23,21 @@ type Config struct {
 	Sources    []SourceConfig  `yaml:"sources"`
 	Redaction  RedactionConfig `yaml:"redaction"`
 	RateLimits RateLimitConfig `yaml:"rate_limits"`
+	TLS        TLSConfig       `yaml:"tls"`
+}
+
+// TLSConfig mirrors tlsconfig.Options. See docs §10.6 for the tier model.
+type TLSConfig struct {
+	CABundlePath   string `yaml:"ca_bundle"`
+	CertPin        string `yaml:"cert_pin"`
+	ClientCertFile string `yaml:"client_cert"`
+	ClientKeyFile  string `yaml:"client_key"`
+	SkipVerify     bool   `yaml:"skip_verify"`
+	Acknowledged   bool   `yaml:"i_understand_this_is_insecure"`
 }
 
 // SourceConfig is a discriminated union by Type.
-// Type values: "file", "docker".
+// Type values: "file", "docker", "journald", "kubernetes".
 type SourceConfig struct {
 	Type    string `yaml:"type"`
 	Enabled bool   `yaml:"enabled"`
@@ -37,6 +48,13 @@ type SourceConfig struct {
 	// type=docker
 	Socket            string   `yaml:"socket,omitempty"`
 	ExcludeContainers []string `yaml:"exclude_containers,omitempty"`
+
+	// type=journald
+	Units []string `yaml:"units,omitempty"`
+
+	// type=kubernetes
+	PodLogRoot        string   `yaml:"pod_log_root,omitempty"`
+	ExcludeNamespaces []string `yaml:"exclude_namespaces,omitempty"`
 }
 
 // RedactionConfig controls PII stripping before envelopes leave the host.

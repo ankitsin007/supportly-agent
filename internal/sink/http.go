@@ -7,6 +7,7 @@ package sink
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -30,12 +31,22 @@ type HTTP struct {
 	MaxBackoff  time.Duration
 }
 
-// New returns an HTTP sink with sane defaults.
+// New returns an HTTP sink with sane defaults and the system TLS config.
 func New(url, apiKey string) *HTTP {
+	return NewWithTLS(url, apiKey, nil)
+}
+
+// NewWithTLS returns an HTTP sink that uses the supplied *tls.Config.
+// Pass nil to inherit Go's defaults (system root pool, no mTLS).
+func NewWithTLS(url, apiKey string, tlsCfg *tls.Config) *HTTP {
+	transport := &http.Transport{}
+	if tlsCfg != nil {
+		transport.TLSClientConfig = tlsCfg
+	}
 	return &HTTP{
 		URL:         url,
 		APIKey:      apiKey,
-		Client:      &http.Client{Timeout: 10 * time.Second},
+		Client:      &http.Client{Timeout: 10 * time.Second, Transport: transport},
 		MaxRetries:  5,
 		BaseBackoff: 1 * time.Second,
 		MaxBackoff:  60 * time.Second,
