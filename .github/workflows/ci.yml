@@ -71,6 +71,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.22"
+      - name: Install syft (needed for SBOM step)
+        uses: anchore/sbom-action/download-syft@v0
       - name: Snapshot release (no publish, no sign)
         uses: goreleaser/goreleaser-action@v6
         with:

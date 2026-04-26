@@ -2,43 +2,33 @@
 #
 # Multi-stage build for ghcr.io/ankitsin007/supportly-agent.
 #
-# Stage 1 (builder): compile a static binary from current source. Used by
-# `docker build` invocations outside of GoReleaser (e.g., local testing).
-# In production, GoReleaser pre-builds binaries and the release workflow's
-# `docker buildx` consumes them via build args — see .goreleaser.yml.
+# Stage 1 (builder): compile a static binary from current source.
+# Stage 2 (runtime): distroless static. Final image ~25 MB; no shell, no
+#   package manager, nothing CVE-scannable but Go itself.
 #
-# Stage 2 (runtime): distroless static. ~25 MB total image, no shell, no
-# package manager, nothing to CVE-scan but Go itself.
-#
-# To build locally:
-#   docker build -t supportly-agent:dev .
-# To use a pre-built binary (release path):
-#   docker build --build-arg PREBUILT=./bin/supportly-agent-linux-amd64 -t supportly-agent .
+# The release workflow uses `docker buildx build` with this Dockerfile
+# to produce multi-arch (linux/amd64 + linux/arm64) images and pushes
+# them to ghcr.io. The Go cross-compile happens inside the builder
+# stage thanks to BuildKit's TARGETOS/TARGETARCH automatic args.
 
-ARG PREBUILT=""
-
-FROM golang:1.22-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.22-alpine AS builder
 WORKDIR /src
 RUN apk add --no-cache git
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build \
+
+# BuildKit injects TARGETOS + TARGETARCH for the requested platform when
+# `docker buildx build --platform linux/amd64,linux/arm64 ...` is used.
+ARG TARGETOS
+ARG TARGETARCH
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -trimpath \
     -ldflags="-s -w -X main.version=$(git describe --tags --always 2>/dev/null || echo dev)" \
     -o /out/supportly-agent ./cmd/supportly-agent
 
-# Tiny copy stage that selects either the pre-built binary (release path)
-# or the freshly-compiled one (local-dev path). Keeps the runtime stage
-# uncluttered.
-FROM alpine:3.20 AS chooser
-ARG PREBUILT
-COPY --from=builder /out/supportly-agent /tmp/built
-COPY ${PREBUILT:-/tmp/built} /tmp/agent
-RUN chmod +x /tmp/agent
-
 FROM gcr.io/distroless/static-debian12:nonroot
-COPY --from=chooser /tmp/agent /usr/local/bin/supportly-agent
+COPY --from=builder /out/supportly-agent /usr/local/bin/supportly-agent
 
 # Container metadata (consumed by ghcr.io UI, vulnerability scanners, etc.).
 LABEL org.opencontainers.image.source="https://github.com/ankitsin007/supportly-agent"

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -116,10 +115,6 @@ func TestServer_BindFailsIfPortBusy(t *testing.T) {
 		t.Errorf("expected bind error on duplicate listen")
 	}
 }
-
-// Counters used by the parallel-safe test below; kept package-local so
-// future tests have a quick atomic to share.
-var _testCounter atomic.Uint64
 
 func waitForListen(t *testing.T) {
 	t.Helper()
