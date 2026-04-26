@@ -79,6 +79,18 @@ jobs:
           version: '~> v2'
           args: release --snapshot --skip=publish,sign --clean
 
+  helm-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: latest
+      - name: Lint chart
+        run: helm lint deploy/helm/
+      - name: Template renders
+        run: helm template ci deploy/helm/ --set projectId=test --set apiKey=sk_test > /dev/null
+
   docker-build:
     runs-on: ubuntu-latest
     steps:

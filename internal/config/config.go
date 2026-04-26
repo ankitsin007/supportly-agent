@@ -24,6 +24,7 @@ type Config struct {
 	Redaction  RedactionConfig `yaml:"redaction"`
 	RateLimits RateLimitConfig `yaml:"rate_limits"`
 	TLS        TLSConfig       `yaml:"tls"`
+	Buffer     BufferConfig    `yaml:"buffer"`
 }
 
 // TLSConfig mirrors tlsconfig.Options. See docs §10.6 for the tier model.
@@ -70,6 +71,26 @@ type RateLimitConfig struct {
 	Burst        int `yaml:"burst"`
 }
 
+// BufferConfig controls the on-disk envelope buffer used as fallback when
+// the network is down or Supportly returns 5xx.
+type BufferConfig struct {
+	// Enabled defaults to true. Set false to disable buffering entirely
+	// (failed events are dropped immediately).
+	Enabled bool `yaml:"enabled"`
+
+	// Path is where the buffer files live. Default
+	// /var/lib/supportly/agent/queue (must be writable).
+	Path string `yaml:"path"`
+
+	// MaxDiskMB caps total disk usage. Oldest entries are evicted when
+	// a new write would exceed it. Default 500.
+	MaxDiskMB int `yaml:"max_disk_mb"`
+
+	// ReplayIntervalSeconds — how often to retry buffered entries.
+	// Default 30.
+	ReplayIntervalSeconds int `yaml:"replay_interval_seconds"`
+}
+
 // Load reads a YAML file (if path != "") and applies env-var overrides.
 // Returns a fully-populated Config or an error if required fields are missing.
 func Load(path string) (*Config, error) {
@@ -103,6 +124,12 @@ func defaults() *Config {
 		RateLimits: RateLimitConfig{
 			PerSourceEPS: 100,
 			Burst:        500,
+		},
+		Buffer: BufferConfig{
+			Enabled:               true,
+			Path:                  "/var/lib/supportly/agent/queue",
+			MaxDiskMB:             500,
+			ReplayIntervalSeconds: 30,
 		},
 	}
 }
