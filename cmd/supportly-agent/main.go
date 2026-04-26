@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ankitsin007/supportly-agent/internal/config"
+	"github.com/ankitsin007/supportly-agent/internal/healthz"
 	"github.com/ankitsin007/supportly-agent/internal/parser"
 	"github.com/ankitsin007/supportly-agent/internal/ratelimit"
 	"github.com/ankitsin007/supportly-agent/internal/redact"
@@ -30,7 +31,7 @@ var (
 	logLevel   = flag.String("log-level", "info", "Log level: debug, info, warn, error")
 )
 
-const version = "0.3.0"
+const version = "0.5.0"
 
 func main() {
 	flag.Parse()
@@ -130,6 +131,18 @@ func main() {
 
 	rawCh := make(chan source.RawLog, 1024)
 	var wg sync.WaitGroup
+
+	// Start the local /healthz server. Bind failure is logged but
+	// not fatal — the agent itself can still ship events even if the
+	// healthz port is taken.
+	hzSrv := healthz.New(version, sources)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := hzSrv.Start(ctx); err != nil {
+			slog.Warn("healthz server failed to start", "err", err)
+		}
+	}()
 
 	for _, s := range sources {
 		s := s

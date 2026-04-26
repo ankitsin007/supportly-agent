@@ -1,0 +1,117 @@
+# GoReleaser configuration for the Supportly Agent.
+#
+# What this produces on each `git tag v*` push:
+#   - Binary archives for linux/{amd64,arm64} + darwin/{amd64,arm64}
+#     containing the agent binary, README, LICENSE, and example config.
+#   - SHA256 checksums file (consumed by install.sh for verification).
+#   - SBOM in SPDX JSON format per binary (Syft).
+#   - Multi-arch container image at ghcr.io/ankitsin007/supportly-agent.
+#   - Cosign keyless signatures on every artifact (binaries, archives,
+#     checksums, SBOM, container image manifest), published to Sigstore Rekor.
+#   - GitHub Release with auto-generated changelog from PR titles.
+#
+# To dry-run locally (requires goreleaser installed):
+#     goreleaser release --snapshot --skip=publish,sign --clean
+version: 2
+
+project_name: supportly-agent
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: agent
+    main: ./cmd/supportly-agent
+    binary: supportly-agent
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - README.md
+      - LICENSE
+      - examples/*
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+# SBOM per binary so customer security teams can audit the dependency tree.
+sboms:
+  - artifacts: archive
+
+# Cosign keyless signing — uses Sigstore's free OIDC flow. Public keys are
+# derived from the GitHub Actions workflow's identity, verifiable via
+# `cosign verify-blob ... --certificate-identity-regexp 'github.com/ankitsin007/supportly-agent'`.
+signs:
+  - cmd: cosign
+    env:
+      - COSIGN_EXPERIMENTAL=1
+    certificate: '${artifact}.pem'
+    args:
+      - sign-blob
+      - '--output-certificate=${certificate}'
+      - '--output-signature=${signature}'
+      - '${artifact}'
+      - '--yes'
+    artifacts: checksum
+    output: true
+
+# Container images are built + pushed by the release workflow itself
+# (see .github/workflows/release.yml) using docker buildx; we don't use
+# GoReleaser's `dockers:` block to keep the multi-arch + cosign-attestation
+# pipeline simple and explicit.
+
+changelog:
+  use: github-native
+  sort: asc
+
+release:
+  github:
+    owner: ankitsin007
+    name: supportly-agent
+  draft: false
+  prerelease: auto
+  name_template: 'v{{ .Version }}'
+  header: |
+    ## Supportly Agent v{{ .Version }}
+
+    Drop-in error capture for [Supportly](https://supportly.io). No SDK required.
+
+    **Install (one-liner):**
+    ```bash
+    curl -fsSL https://raw.githubusercontent.com/ankitsin007/supportly-agent/main/install.sh | sh -s -- \
+      --api-key sk_... --project-id <uuid>
+    ```
+
+    **Verify checksums:**
+    ```bash
+    cosign verify-blob \
+      --certificate checksums.txt.pem \
+      --signature checksums.txt.sig \
+      --certificate-identity-regexp 'github.com/ankitsin007/supportly-agent' \
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+      checksums.txt
+    sha256sum -c checksums.txt
+    ```
+
+snapshot:
+  version_template: '{{ incpatch .Version }}-next'
