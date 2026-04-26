@@ -1,0 +1,114 @@
+---
+# Supportly Agent DaemonSet — runs one agent pod per node, tailing local
+# /var/log/pods/* so each node's container logs are captured by the agent
+# scheduled on that node.
+#
+# Apply:
+#   kubectl create namespace supportly
+#   kubectl -n supportly create secret generic supportly-agent \
+#     --from-literal=project-id=<uuid> --from-literal=api-key=<key>
+#   kubectl apply -f https://raw.githubusercontent.com/ankitsin007/supportly-agent/main/deploy/k8s/daemonset.yaml
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: supportly
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: supportly-agent
+  namespace: supportly
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: supportly-agent
+rules:
+  # Pod metadata enrichment is M1 best-effort via dir parsing; the API
+  # client is reserved for M1.1 follow-up. RBAC is minimal: read-only
+  # on Pod metadata only.
+  - apiGroups: ['']
+    resources: ['pods']
+    verbs: ['get', 'list', 'watch']
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: supportly-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: supportly-agent
+subjects:
+  - kind: ServiceAccount
+    name: supportly-agent
+    namespace: supportly
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: supportly-agent
+  namespace: supportly
+  labels:
+    app.kubernetes.io/name: supportly-agent
+    app.kubernetes.io/component: agent
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: supportly-agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: supportly-agent
+    spec:
+      serviceAccountName: supportly-agent
+      hostNetwork: false
+      tolerations:
+        - operator: Exists  # also run on tainted/control-plane nodes
+      containers:
+        - name: agent
+          image: ghcr.io/ankitsin007/supportly-agent:latest
+          imagePullPolicy: Always
+          env:
+            - name: SUPPORTLY_PROJECT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: supportly-agent
+                  key: project-id
+            - name: SUPPORTLY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: supportly-agent
+                  key: api-key
+            - name: SUPPORTLY_API_ENDPOINT
+              value: 'https://ingest.supportly.io/api/v1/ingest/events'
+          volumeMounts:
+            - name: pod-logs
+              mountPath: /var/log/pods
+              readOnly: true
+            - name: container-logs
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop: ['ALL']
+      volumes:
+        - name: pod-logs
+          hostPath:
+            path: /var/log/pods
+            type: Directory
+        - name: container-logs
+          hostPath:
+            path: /var/lib/docker/containers
+            type: DirectoryOrCreate

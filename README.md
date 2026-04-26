@@ -36,21 +36,45 @@ make demo
 
 Within ~5 seconds you should see a new issue in your Supportly dashboard.
 
-## Production install (target — not yet shipped)
+## Production install
 
-The full M1 will support all the install paths below. Today, only `make build` works.
+Pick whichever fits your security posture.
 
+**One-liner (auto-detects Docker / systemd / k8s):**
 ```bash
-# Docker (auditable form)
+curl -fsSL https://raw.githubusercontent.com/ankitsin007/supportly-agent/main/install.sh \
+  | sh -s -- --api-key sk_... --project-id <uuid>
+```
+Read the script first if you'd like — it's ~250 lines, posted at the URL above.
+
+**Docker (auditable form):**
+```bash
 docker run -d --restart=always --name supportly-agent \
   -e SUPPORTLY_API_KEY=sk_... \
-  -e SUPPORTLY_PROJECT_ID=... \
+  -e SUPPORTLY_PROJECT_ID=<uuid> \
   -v /var/log:/host/var/log:ro \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
   ghcr.io/ankitsin007/supportly-agent:latest
+```
 
-# One-liner (marketing form)
-curl -fsSL https://get.supportly.io | sh -s -- --api-key sk_... --project-id ...
+**Kubernetes:**
+```bash
+kubectl create namespace supportly
+kubectl -n supportly create secret generic supportly-agent \
+  --from-literal=project-id=<uuid> \
+  --from-literal=api-key=sk_...
+kubectl apply -f https://raw.githubusercontent.com/ankitsin007/supportly-agent/main/deploy/k8s/daemonset.yaml
+```
+
+### Verify checksums (recommended)
+```bash
+cosign verify-blob \
+  --certificate checksums.txt.pem \
+  --signature checksums.txt.sig \
+  --certificate-identity-regexp 'github.com/ankitsin007/supportly-agent' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  checksums.txt
+sha256sum -c checksums.txt
 ```
 
 ## Architecture
@@ -92,11 +116,11 @@ Identical envelope shape to the SDKs — Supportly can't tell the difference.
 
 | Week | Adds |
 |---|---|
-| 2 | `DockerSource`, regex banks for Python/Java/Go/Node/Ruby tracebacks, on-disk ring buffer, rate limiter |
-| 3 | `JournaldSource`, `KubernetesSource`, full TLS tier (custom CA, mTLS, cert pin), security review |
-| 4 | Supportly UI: agent enrollment + agents list page |
-| 5 | `get.supportly.io` install script, signed binaries, closed beta |
-| 6 | GA: docs site, Helm chart, status page |
+| ~~2~~ | ✅ `DockerSource`, regex banks for Python/Java/Go/Node/Ruby tracebacks, rate limiter, PII redactor |
+| ~~3~~ | ✅ `JournaldSource`, `KubernetesSource`, tiered TLS (custom CA, mTLS, SPKI pin) |
+| ~~4~~ | ✅ Supportly UI: enrollment, agents list, heartbeat |
+| ~~5~~ | ✅ `install.sh`, GoReleaser, multi-arch container, cosign keyless signing |
+| 6 | GA: docs site, Helm chart, status page, on-disk ring buffer |
 
 ## Configuration
 

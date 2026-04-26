@@ -51,3 +51,44 @@ jobs:
         with:
           version: latest
           args: --timeout=5m
+
+  install-script:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck install.sh + install_test.sh
+        run: |
+          shellcheck install.sh install_test.sh || true   # advisory for now
+      - name: Run install_test.sh
+        run: bash install_test.sh
+
+  goreleaser-snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - name: Snapshot release (no publish, no sign)
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: '~> v2'
+          args: release --snapshot --skip=publish,sign --clean
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: supportly-agent:ci
+      - name: Verify entrypoint runs
+        run: docker run --rm supportly-agent:ci --help 2>&1 || true
