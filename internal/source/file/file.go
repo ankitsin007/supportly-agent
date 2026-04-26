@@ -37,10 +37,10 @@ type FileSource struct {
 	emitted atomic.Uint64
 	dropped atomic.Uint64
 
-	mu          sync.Mutex
-	lastErr     string
-	lastErrAt   time.Time
-	stopped     bool
+	mu        sync.Mutex
+	lastErr   string
+	lastErrAt time.Time
+	stopped   bool
 }
 
 // New returns an unstarted FileSource for the given path.

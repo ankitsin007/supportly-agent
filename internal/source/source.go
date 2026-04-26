@@ -74,9 +74,9 @@ type Source interface {
 // Health is the observability snapshot the agent ships to Supportly
 // every 60s as `parse_failures_total`, `events_buffered`, etc.
 type Health struct {
-	Healthy        bool
-	LinesEmitted   uint64
-	LinesDropped   uint64
-	LastError      string
-	LastErrorAt    time.Time
+	Healthy      bool
+	LinesEmitted uint64
+	LinesDropped uint64
+	LastError    string
+	LastErrorAt  time.Time
 }

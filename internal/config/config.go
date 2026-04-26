@@ -24,9 +24,10 @@ type Config struct {
 }
 
 // SourceConfig is a discriminated union by Type. M1 supports type=file.
+// Paths is only used when Type == "file".
 type SourceConfig struct {
 	Type    string   `yaml:"type"`
-	Paths   []string `yaml:"paths,omitempty"`   // for type=file
+	Paths   []string `yaml:"paths,omitempty"`
 	Enabled bool     `yaml:"enabled"`
 }
 
