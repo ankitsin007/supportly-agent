@@ -20,15 +20,36 @@ type Config struct {
 	APIEndpoint string `yaml:"api_endpoint"`
 	APIKey      string `yaml:"api_key"`
 
-	Sources []SourceConfig `yaml:"sources"`
+	Sources    []SourceConfig  `yaml:"sources"`
+	Redaction  RedactionConfig `yaml:"redaction"`
+	RateLimits RateLimitConfig `yaml:"rate_limits"`
 }
 
-// SourceConfig is a discriminated union by Type. M1 supports type=file.
-// Paths is only used when Type == "file".
+// SourceConfig is a discriminated union by Type.
+// Type values: "file", "docker".
 type SourceConfig struct {
-	Type    string   `yaml:"type"`
-	Paths   []string `yaml:"paths,omitempty"`
-	Enabled bool     `yaml:"enabled"`
+	Type    string `yaml:"type"`
+	Enabled bool   `yaml:"enabled"`
+
+	// type=file
+	Paths []string `yaml:"paths,omitempty"`
+
+	// type=docker
+	Socket            string   `yaml:"socket,omitempty"`
+	ExcludeContainers []string `yaml:"exclude_containers,omitempty"`
+}
+
+// RedactionConfig controls PII stripping before envelopes leave the host.
+type RedactionConfig struct {
+	Enabled  bool     `yaml:"enabled"`
+	Patterns []string `yaml:"patterns,omitempty"` // names from redact builtin set
+	Custom   []string `yaml:"custom,omitempty"`   // arbitrary regexes
+}
+
+// RateLimitConfig caps the per-source event rate.
+type RateLimitConfig struct {
+	PerSourceEPS int `yaml:"per_source_eps"`
+	Burst        int `yaml:"burst"`
 }
 
 // Load reads a YAML file (if path != "") and applies env-var overrides.
@@ -57,6 +78,14 @@ func Load(path string) (*Config, error) {
 func defaults() *Config {
 	return &Config{
 		APIEndpoint: "https://ingest.supportly.io",
+		Redaction: RedactionConfig{
+			Enabled: true,
+			// Empty Patterns list => all builtin patterns active.
+		},
+		RateLimits: RateLimitConfig{
+			PerSourceEPS: 100,
+			Burst:        500,
+		},
 	}
 }
 
@@ -81,6 +110,9 @@ func (c *Config) validate() error {
 	}
 	if c.APIEndpoint == "" {
 		return fmt.Errorf("api_endpoint must not be empty")
+	}
+	if c.RateLimits.PerSourceEPS < 0 || c.RateLimits.Burst < 0 {
+		return fmt.Errorf("rate_limits values must be non-negative")
 	}
 	return nil
 }
