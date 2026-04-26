@@ -1,0 +1,21 @@
+Supportly Agent installed.
+
+The agent runs as a DaemonSet in namespace `{{ .Release.Namespace }}`.
+Each pod tails /var/log/pods on its node and ships exceptions to
+{{ .Values.apiEndpoint | default "https://ingest.supportly.io" }}.
+
+Verify it's running:
+
+    kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/name=supportly-agent
+    kubectl -n {{ .Release.Namespace }} logs -l app.kubernetes.io/name=supportly-agent --tail=20
+
+View captured agents in your dashboard:
+
+    https://app.supportly.io/dashboard/ingest-agents
+
+Trigger a test event from any pod in the cluster:
+
+    kubectl run smoke --image=python:3.11 --rm -it --restart=Never -- \
+      python -c 'raise RuntimeError("supportly helm install smoke")'
+
+Issues should appear within ~5 seconds.

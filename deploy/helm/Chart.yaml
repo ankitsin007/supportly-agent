@@ -1,0 +1,21 @@
+apiVersion: v2
+name: supportly-agent
+description: |
+  Drop-in error capture for Supportly. Tails container logs on every node
+  via a DaemonSet and ships exceptions to your Supportly project — no SDK
+  changes needed in your applications.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+home: https://github.com/ankitsin007/supportly-agent
+sources:
+  - https://github.com/ankitsin007/supportly-agent
+maintainers:
+  - name: Supportly
+    url: https://github.com/ankitsin007/supportly-agent
+keywords:
+  - observability
+  - error-tracking
+  - log-shipping
+  - supportly
+icon: https://supportly.io/favicon.svg

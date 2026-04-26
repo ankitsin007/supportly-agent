@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ printf "%s-%s" .Release.Name .Chart.Name }}
+  labels:
+    {{- include "supportly-agent.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "supportly-agent.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "supportly-agent.labels" . | nindent 8 }}
+    spec:
+      {{- if .Values.serviceAccount.create }}
+      serviceAccountName: {{ printf "%s-%s" .Release.Name .Chart.Name }}
+      {{- end }}
+      hostNetwork: false
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: agent
+          image: '{{ .Values.image.repository }}:{{ include "supportly-agent.imageTag" . }}'
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          env:
+            - name: SUPPORTLY_PROJECT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "supportly-agent.secretName" . }}
+                  key: project-id
+            - name: SUPPORTLY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "supportly-agent.secretName" . }}
+                  key: api-key
+            {{- if .Values.apiEndpoint }}
+            - name: SUPPORTLY_API_ENDPOINT
+              value: {{ .Values.apiEndpoint | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: pod-logs
+              mountPath: /var/log/pods
+              readOnly: true
+            - name: container-logs
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+            {{- if .Values.buffer.enabled }}
+            - name: buffer
+              mountPath: /var/lib/supportly/agent/queue
+            {{- end }}
+      volumes:
+        - name: pod-logs
+          hostPath:
+            path: /var/log/pods
+            type: Directory
+        - name: container-logs
+          hostPath:
+            path: /var/lib/docker/containers
+            type: DirectoryOrCreate
+        {{- if .Values.buffer.enabled }}
+        - name: buffer
+          {{- if .Values.buffer.hostPath.path }}
+          hostPath:
+            path: {{ .Values.buffer.hostPath.path }}
+            type: DirectoryOrCreate
+          {{- else }}
+          emptyDir:
+            sizeLimit: {{ .Values.buffer.maxDiskMB }}Mi
+          {{- end }}
+        {{- end }}

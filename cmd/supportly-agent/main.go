@@ -12,7 +12,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ankitsin007/supportly-agent/internal/buffer"
 	"github.com/ankitsin007/supportly-agent/internal/config"
+	"github.com/ankitsin007/supportly-agent/internal/envelope"
 	"github.com/ankitsin007/supportly-agent/internal/healthz"
 	"github.com/ankitsin007/supportly-agent/internal/parser"
 	"github.com/ankitsin007/supportly-agent/internal/ratelimit"
@@ -31,7 +33,7 @@ var (
 	logLevel   = flag.String("log-level", "info", "Log level: debug, info, warn, error")
 )
 
-const version = "0.5.0"
+const version = "1.0.0"
 
 func main() {
 	flag.Parse()
@@ -82,6 +84,22 @@ func main() {
 	}
 
 	httpSink := sink.NewWithTLS(cfg.APIEndpoint, cfg.APIKey, tlsCfg)
+
+	// On-disk buffer for offline survival. nil = disabled.
+	var diskBuf *buffer.Buffer
+	if cfg.Buffer.Enabled {
+		maxBytes := int64(cfg.Buffer.MaxDiskMB) * 1024 * 1024
+		var bufErr error
+		diskBuf, bufErr = buffer.New(cfg.Buffer.Path, maxBytes)
+		if bufErr != nil {
+			slog.Warn("disk buffer disabled — could not open path",
+				"path", cfg.Buffer.Path, "err", bufErr)
+			diskBuf = nil
+		} else {
+			slog.Info("disk buffer ready", "path", cfg.Buffer.Path,
+				"max_mb", cfg.Buffer.MaxDiskMB, "queued", diskBuf.Len())
+		}
+	}
 
 	// PII redactor — wraps the sink so envelopes are scrubbed at the boundary.
 	var redactor *redact.Redactor
@@ -189,7 +207,16 @@ func main() {
 			return
 		}
 		if err := httpSink.Send(ctx, env); err != nil {
-			slog.Warn("ingest send failed", "err", err)
+			if diskBuf != nil {
+				if seq, bufErr := diskBuf.Enqueue(env); bufErr != nil {
+					slog.Warn("ingest send failed AND disk buffer rejected envelope",
+						"send_err", err, "buf_err", bufErr)
+				} else {
+					slog.Debug("buffered envelope for retry", "seq", seq, "send_err", err)
+				}
+			} else {
+				slog.Warn("ingest send failed (buffer disabled, dropping)", "err", err)
+			}
 		} else {
 			slog.Debug("envelope shipped",
 				"event_id", env.EventID,
@@ -233,6 +260,43 @@ func main() {
 			}
 		}
 	}()
+
+	// Replay goroutine — periodically tries to ship buffered envelopes.
+	// Stops on first error (most likely the network is still down) and
+	// waits for the next tick.
+	if diskBuf != nil {
+		interval := time.Duration(cfg.Buffer.ReplayIntervalSeconds) * time.Second
+		if interval <= 0 {
+			interval = 30 * time.Second
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ticker := time.NewTicker(interval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					if diskBuf.Len() == 0 {
+						continue
+					}
+					n, err := diskBuf.Drain(func(env *envelope.Envelope) error {
+						return httpSink.Send(ctx, env)
+					})
+					if n > 0 {
+						slog.Info("replayed buffered envelopes", "shipped", n,
+							"remaining", diskBuf.Len())
+					}
+					if err != nil {
+						slog.Debug("replay paused on error",
+							"err", err, "remaining", diskBuf.Len())
+					}
+				}
+			}
+		}()
+	}
 
 	<-ctx.Done()
 	slog.Info("shutdown signal received — draining")

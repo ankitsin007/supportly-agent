@@ -1,0 +1,69 @@
+# Default values for supportly-agent.
+# Override per environment with `helm install -f myvalues.yaml ...`.
+
+# REQUIRED — your Supportly project credentials. The Helm chart will
+# create a Secret containing these. To inject from an existing Secret
+# instead, set `existingSecret` and leave these blank.
+projectId: ""
+apiKey: ""
+
+# Set to a Secret already in the namespace containing keys 'project-id'
+# and 'api-key'. When set, the chart will NOT create its own Secret.
+existingSecret: ""
+
+# Override Supportly's ingest URL — leave blank for SaaS Supportly.
+apiEndpoint: ""
+
+image:
+  repository: ghcr.io/ankitsin007/supportly-agent
+  tag: ""        # defaults to .Chart.AppVersion
+  pullPolicy: IfNotPresent
+
+# DaemonSet pods inherit these resources. Defaults sized for 100 EPS.
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+# Where the agent buffers undeliverable envelopes. Mounted as an
+# emptyDir by default; set hostPath.path to use a node-local directory
+# that survives pod restart.
+buffer:
+  enabled: true
+  maxDiskMB: 500
+  hostPath:
+    path: ""
+
+# Pod tolerations — by default we run on every node including tainted
+# control-plane nodes. Override if you only want a subset.
+tolerations:
+  - operator: Exists
+
+# nodeSelector + affinity for restricting the DaemonSet's scheduling.
+nodeSelector: {}
+affinity: {}
+
+# Namespaces to exclude from log capture. Defaults match the agent's
+# built-in exclusions.
+excludeNamespaces:
+  - kube-system
+  - kube-public
+  - kube-node-lease
+
+serviceAccount:
+  create: true
+  annotations: {}
+
+# Pod security context defaults to non-root + read-only root FS.
+podSecurityContext:
+  runAsNonRoot: true
+  fsGroup: 65532
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ['ALL']
