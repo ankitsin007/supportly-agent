@@ -83,8 +83,8 @@ func (h *HTTP) Send(ctx context.Context, env *envelope.Envelope) error {
 		}
 
 		// Drain & close so the connection can be reused.
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
 
 		switch {
 		case resp.StatusCode >= 200 && resp.StatusCode < 300:
