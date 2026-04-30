@@ -4,6 +4,44 @@ All notable changes documented here. The format is loosely based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 follows [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] — 2026-05-01
+
+M5 progress: deepest-fidelity tier (eBPF) scaffolding + OTel auto-
+instrument adapters. Targets the "I want zero-code instrumentation"
+customer who already runs OTel SDKs in production.
+
+### Added
+- **OTel/OTLP HTTP log receiver** (`type: otel` source). Listens on
+  `127.0.0.1:4318` by default. Customers with existing OpenTelemetry
+  log exporters can point them at the agent without any other changes.
+  Wire types follow the OTLP/HTTP JSON spec; severity_number is banded
+  to text when severity_text is absent. Resource attributes
+  `service.name` / `service.namespace` / `service.version` / `host.name`
+  are promoted to envelope tags.
+- **`supportly-agent adapters <lang>` subcommand** prints per-language
+  OTel auto-instrument snippets. Supports `python`, `node`, `java`.
+  The snippets are embedded via `//go:embed` so air-gapped hosts can
+  read them without docs/ being shipped alongside.
+- **eBPF uprobe receiver scaffolding** (`type: ebpf` source). Linux-
+  only — preflight checks kernel ≥ 5.4, CAP_BPF, `/sys/fs/bpf` mount.
+  Per-language uprobe attach (Python `PyErr_Display`, JVM JVMTI, V8,
+  Go `runtime.gopanic`, Ruby `rb_exc_raise`) is M5.1–M5.5 follow-up
+  work; this release only ships the platform-portable scaffolding so
+  cross-compile to macOS/Windows still works.
+
+### Changed
+- `SourceConfig` discriminator now accepts `otel` and `ebpf`.
+
+### Notes
+- `ebpf` source returns `ErrUnsupported` on macOS/Windows and is
+  demoted to a startup warning rather than a fatal error — the rest
+  of the agent (file/docker/journald/k8s/otel sources) keeps running.
+
+## [1.1.0] — 2026-04-30
+
+M5 Week 1: OTLP receiver landed (see 1.2.0 notes — bundled into the
+release for clarity).
+
 ## [1.0.0] — 2026-04-26 (GA)
 
 The first generally-available release. Everything from M1 — log capture
