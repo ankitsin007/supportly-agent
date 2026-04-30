@@ -38,7 +38,7 @@ type TLSConfig struct {
 }
 
 // SourceConfig is a discriminated union by Type.
-// Type values: "file", "docker", "journald", "kubernetes".
+// Type values: "file", "docker", "journald", "kubernetes", "otel".
 type SourceConfig struct {
 	Type    string `yaml:"type"`
 	Enabled bool   `yaml:"enabled"`
@@ -56,6 +56,11 @@ type SourceConfig struct {
 	// type=kubernetes
 	PodLogRoot        string   `yaml:"pod_log_root,omitempty"`
 	ExcludeNamespaces []string `yaml:"exclude_namespaces,omitempty"`
+
+	// type=otel
+	// OTLP/HTTP listen address. Default 127.0.0.1:4318 (the OTLP-reserved
+	// HTTP port). Use 0.0.0.0:4318 to accept from other hosts on the LAN.
+	OTLPAddr string `yaml:"otlp_addr,omitempty"`
 }
 
 // RedactionConfig controls PII stripping before envelopes leave the host.
