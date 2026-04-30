@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -12,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ankitsin007/supportly-agent/internal/adapters"
 	"github.com/ankitsin007/supportly-agent/internal/buffer"
 	"github.com/ankitsin007/supportly-agent/internal/config"
 	"github.com/ankitsin007/supportly-agent/internal/envelope"
@@ -37,6 +39,14 @@ var (
 const version = "1.1.0"
 
 func main() {
+	// Subcommand dispatch: `supportly-agent adapters [lang]` short-
+	// circuits the daemon path and prints the embedded snippet to
+	// stdout. Done before flag.Parse so the existing daemon flag set
+	// doesn't reject `adapters` as an unknown flag.
+	if len(os.Args) >= 2 && os.Args[1] == "adapters" {
+		os.Exit(runAdaptersCmd(os.Args[2:]))
+	}
+
 	flag.Parse()
 	setupLogging(*logLevel)
 	slog.Info("supportly-agent starting", "version", version)
@@ -351,4 +361,30 @@ func setupLogging(level string) {
 	}
 	h := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: l})
 	slog.SetDefault(slog.New(h))
+}
+
+// runAdaptersCmd handles `supportly-agent adapters ...`. Returns the
+// process exit code so main can call os.Exit on it.
+func runAdaptersCmd(args []string) int {
+	if len(args) == 0 || args[0] == "list" {
+		fmt.Println("Available auto-instrument adapters:")
+		for _, lang := range adapters.List() {
+			fmt.Printf("  %s\n", lang)
+		}
+		fmt.Println("\nUsage: supportly-agent adapters <language>")
+		return 0
+	}
+	if args[0] == "-h" || args[0] == "--help" {
+		fmt.Println("Usage: supportly-agent adapters [list | <language>]")
+		fmt.Println("Languages:", adapters.List())
+		return 0
+	}
+	snippet, ok := adapters.Get(args[0])
+	if !ok {
+		fmt.Fprintf(os.Stderr, "unknown adapter: %s\n", args[0])
+		fmt.Fprintf(os.Stderr, "Available: %v\n", adapters.List())
+		return 2
+	}
+	fmt.Print(snippet)
+	return 0
 }

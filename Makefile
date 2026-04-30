@@ -1,4 +1,4 @@
-.PHONY: build test lint fmt clean demo run
+.PHONY: build test lint fmt clean demo run adapters-sync
 
 BIN := supportly-agent
 PKG := github.com/ankitsin007/supportly-agent
@@ -45,3 +45,16 @@ demo: build
 
 run: build
 	./bin/$(BIN) --config examples/demo.yaml --log-level=debug
+
+# Re-copy the adapter snippets into the embedded directory so the
+# `supportly-agent adapters <lang>` CLI matches what's in adapters/*.md.
+# CI's TestEmbeddedMatchesDisk fires when this hasn't been run after
+# editing a snippet.
+adapters-sync:
+	@for f in adapters/*.md; do \
+	  base=$$(basename $$f); \
+	  if [ "$$base" != "README.md" ]; then \
+	    cp "$$f" "internal/adapters/embedded/$$base"; \
+	    echo "synced $$f → internal/adapters/embedded/$$base"; \
+	  fi; \
+	done
