@@ -25,6 +25,7 @@ import (
 	"github.com/ankitsin007/supportly-agent/internal/source/file"
 	"github.com/ankitsin007/supportly-agent/internal/source/journald"
 	"github.com/ankitsin007/supportly-agent/internal/source/kubernetes"
+	"github.com/ankitsin007/supportly-agent/internal/source/otel"
 	"github.com/ankitsin007/supportly-agent/internal/tlsconfig"
 )
 
@@ -33,7 +34,7 @@ var (
 	logLevel   = flag.String("log-level", "info", "Log level: debug, info, warn, error")
 )
 
-const version = "1.0.0"
+const version = "1.1.0"
 
 func main() {
 	flag.Parse()
@@ -135,6 +136,11 @@ func main() {
 				ks.Root = sc.PodLogRoot
 			}
 			sources = append(sources, ks)
+		case "otel":
+			// M5 Week 1: OTel OTLP/HTTP receiver. Customer apps with
+			// existing OpenTelemetry instrumentation can point their
+			// log exporter at the agent without any other changes.
+			sources = append(sources, otel.New(sc.OTLPAddr))
 		default:
 			slog.Warn("unknown source type — skipping", "type", sc.Type)
 		}
