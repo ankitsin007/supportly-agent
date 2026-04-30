@@ -38,7 +38,7 @@ type TLSConfig struct {
 }
 
 // SourceConfig is a discriminated union by Type.
-// Type values: "file", "docker", "journald", "kubernetes", "otel".
+// Type values: "file", "docker", "journald", "kubernetes", "otel", "ebpf".
 type SourceConfig struct {
 	Type    string `yaml:"type"`
 	Enabled bool   `yaml:"enabled"`
@@ -61,6 +61,14 @@ type SourceConfig struct {
 	// OTLP/HTTP listen address. Default 127.0.0.1:4318 (the OTLP-reserved
 	// HTTP port). Use 0.0.0.0:4318 to accept from other hosts on the LAN.
 	OTLPAddr string `yaml:"otlp_addr,omitempty"`
+
+	// type=ebpf
+	// Linux-only (kernel ≥ 5.4, requires CAP_BPF). Returns
+	// ErrUnsupported on every other platform; main.go demotes that
+	// to a startup warning so the rest of the agent still runs.
+	// Targets: paths to executables / shared libs to attach uprobes to.
+	EBPFTargets   []string `yaml:"ebpf_targets,omitempty"`
+	EBPFLanguages []string `yaml:"ebpf_languages,omitempty"`
 }
 
 // RedactionConfig controls PII stripping before envelopes leave the host.

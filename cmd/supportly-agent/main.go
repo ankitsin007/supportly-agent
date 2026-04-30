@@ -24,6 +24,7 @@ import (
 	"github.com/ankitsin007/supportly-agent/internal/sink"
 	"github.com/ankitsin007/supportly-agent/internal/source"
 	"github.com/ankitsin007/supportly-agent/internal/source/docker"
+	"github.com/ankitsin007/supportly-agent/internal/source/ebpf"
 	"github.com/ankitsin007/supportly-agent/internal/source/file"
 	"github.com/ankitsin007/supportly-agent/internal/source/journald"
 	"github.com/ankitsin007/supportly-agent/internal/source/kubernetes"
@@ -36,7 +37,7 @@ var (
 	logLevel   = flag.String("log-level", "info", "Log level: debug, info, warn, error")
 )
 
-const version = "1.1.0"
+const version = "1.2.0"
 
 func main() {
 	// Subcommand dispatch: `supportly-agent adapters [lang]` short-
@@ -151,6 +152,15 @@ func main() {
 			// existing OpenTelemetry instrumentation can point their
 			// log exporter at the agent without any other changes.
 			sources = append(sources, otel.New(sc.OTLPAddr))
+		case "ebpf":
+			// M5 Week 3: eBPF uprobe receiver. Linux-only — the source's
+			// Start() returns ErrUnsupported on macOS/Windows; the
+			// consumer goroutine logs that as a warning and the rest
+			// of the agent keeps running.
+			sources = append(sources, ebpf.New(ebpf.Config{
+				Targets:   sc.EBPFTargets,
+				Languages: sc.EBPFLanguages,
+			}))
 		default:
 			slog.Warn("unknown source type — skipping", "type", sc.Type)
 		}
